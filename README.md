@@ -1,51 +1,130 @@
-# GitHub Pages JavaScript Template
+# GitHub Pages Express.js Template
 
-A simple GitHub Pages template that builds your website with `npm run build` and publishes the contents of the `dist/` folder.
+Build a static website with Express.js, then publish the generated `dist/` folder to GitHub Pages. The repository also includes a GitHub Codespaces development environment.
 
-## 1. Add your website files
+## 1. Open in GitHub Codespaces
 
-Put your website files in the repository root. For example:
+Open the repository on GitHub, select **Code**, open the **Codespaces** tab, and create a codespace.
 
-```text
-index.html
-style.css
-script.js
+The development container provides Node.js 22. After adding your `package.json`, install the dependencies:
+
+```bash
+npm install
 ```
 
-Add any other files your website needs, such as images or additional JavaScript and CSS files.
+## 2. Add package.json
 
-## 2. Create package.json
-
-Create a file named `package.json` in the repository root and add this build script:
+Create `package.json` in the repository root. The `build` script is required because the GitHub Actions workflow runs `npm run build`.
 
 ```json
 {
+  "name": "my-github-pages-site",
+  "version": "1.0.0",
+  "private": true,
   "scripts": {
-    "build": "node -e \"const fs=require('fs');fs.rmSync('dist',{recursive:true,force:true});fs.mkdirSync('dist',{recursive:true});for(const f of ['index.html','style.css','script.js'])fs.copyFileSync(f,'dist/'+f)\""
+    "build": "node server.js"
+  },
+  "dependencies": {
+    "express": "^5.1.0"
   }
 }
 ```
 
-The filenames inside the array must match the files you want to publish. Add every required file to that array. For example, if you have `logo.png`, include `'logo.png'` in the array.
+Do not remove or rename the `build` script unless you also update the workflow.
 
-The build script clears and recreates `dist/`, then copies the listed files into it. The workflow publishes that folder.
+## 3. Add server.js
 
-## 3. Test the build
+Create `server.js` in the repository root. This example uses Express routes to render pages, requests those routes during the build, and writes the returned HTML into `dist/`.
 
-Run this command from the repository root:
+```js
+const express = require("express");
+const fs = require("node:fs/promises");
+const path = require("node:path");
+
+const app = express();
+const outputDirectory = path.join(__dirname, "dist");
+const publicDirectory = path.join(__dirname, "public");
+
+app.get("/", (req, res) => {
+  res.send("<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>Home</title></head><body><h1>Hello from Express.js!</h1><a href=\"/about\">About</a></body></html>");
+});
+
+app.get("/about", (req, res) => {
+  res.send("<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>About</title></head><body><h1>About</h1><a href=\"/\">Home</a></body></html>");
+});
+
+const routes = ["/", "/about"];
+
+async function build() {
+  await fs.rm(outputDirectory, { recursive: true, force: true });
+  await fs.mkdir(outputDirectory, { recursive: true });
+
+  try {
+    await fs.access(publicDirectory);
+    await fs.cp(publicDirectory, outputDirectory, { recursive: true });
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
+
+  const server = await new Promise((resolve, reject) => {
+    const instance = app.listen(0, "127.0.0.1", () => resolve(instance));
+    instance.on("error", reject);
+  });
+
+  try {
+    const address = server.address();
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+
+    for (const route of routes) {
+      const response = await fetch(new URL(route, baseUrl));
+
+      if (!response.ok) {
+        throw new Error(`Failed to build ${route}: HTTP ${response.status}`);
+      }
+
+      const outputPath = route === "/"
+        ? path.join(outputDirectory, "index.html")
+        : path.join(outputDirectory, route.slice(1), "index.html");
+
+      await fs.mkdir(path.dirname(outputPath), { recursive: true });
+      await fs.writeFile(outputPath, await response.text(), "utf8");
+    }
+  } finally {
+    await new Promise((resolve, reject) => {
+      server.close(error => error ? reject(error) : resolve());
+    });
+  }
+
+  process.stdout.write("Static website generated in dist/\\n");
+}
+
+build().catch(error => {
+  process.stderr.write(`${error.stack || error}\\n`);
+  process.exitCode = 1;
+});
+```
+
+Add every page you want generated to the `routes` array. For example, add `"/contact"` when you create an Express route for that page. Each route is saved as an `index.html` file in its own folder, so `/about` becomes `dist/about/index.html`.
+
+Put static assets such as CSS, browser-side JavaScript, fonts, and images in a `public/` folder. The build copies the contents of `public/` into `dist/`. Reference those assets from your pages using paths such as `/style.css` and `/images/logo.png`.
+
+## 4. Install and build
+
+Run these commands from the repository root:
 
 ```bash
+npm install
 npm run build
 ```
 
-Check that the `dist/` folder was created and contains your website files. If a listed file does not exist, the build will fail.
+Make sure the `dist/` folder contains `index.html` and the other generated pages.
 
-## 4. Publish with GitHub Pages
+## 5. Deploy
 
-Push your changes to the `main` branch. The GitHub Actions workflow runs `npm run build` and deploys the resulting `dist/` folder.
+Push your changes to the `main` branch. The workflow runs `npm install`, runs `npm run build`, and deploys `dist/` to GitHub Pages.
 
-In your repository settings, open **Pages** and set the build and deployment source to **GitHub Actions**.
+In the repository settings, open **Pages** and set the build and deployment source to **GitHub Actions**.
 
 ## Important
 
-GitHub Pages hosts static websites. It does not run a persistent Node.js or Express server. Your `server.js` can be used as part of a build process if it generates static files, but the deployed website must consist of static files in `dist/`.
+GitHub Pages only hosts static files. It does not keep an Express.js server running after deployment. Express is used during the build to generate HTML files; browser-side assets are copied into `dist/` and published as a static site.

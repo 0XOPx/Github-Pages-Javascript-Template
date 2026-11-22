@@ -95,11 +95,11 @@ async function build() {
     });
   }
 
-  process.stdout.write("Static website generated in dist/\\n");
+  process.stdout.write("Static website generated in dist/\n");
 }
 
 build().catch(error => {
-  process.stderr.write(`${error.stack || error}\\n`);
+  process.stderr.write(`${error.stack || error}\n`);
   process.exitCode = 1;
 });
 ```

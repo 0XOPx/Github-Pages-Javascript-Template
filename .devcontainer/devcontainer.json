@@ -1,0 +1,6 @@
+{
+  "name": "GitHub Pages Express.js",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:1-22-bookworm",
+  "forwardPorts": [3000],
+  "postCreateCommand": "if [ -f package.json ]; then npm install; fi"
+}
